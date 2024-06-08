@@ -1,4 +1,4 @@
-﻿@page "/"
+﻿@page "/group"
 @rendermode InteractiveServer
 @using BlazorSignalRApp.Models
 @using Microsoft.AspNetCore.SignalR.Client
@@ -9,6 +9,22 @@
 
 
 <PageTitle>Home</PageTitle>
+<hr>
+
+<ul id="Connections">
+    @foreach (var user in connectedUsers)
+    {
+        <li>@user</li>
+    }
+</ul>
+
+<div class="form-group">
+    <label>
+        Group:
+        <input @bind="groupInput" />
+    </label>
+</div>
+
 
 <div class="form-group">
     <label>
@@ -37,50 +53,32 @@
 
 
 
-<h1>Fun Blazor Web Camera Application</h1>
-<div>
-    <button @onclick="Start">Start</button>
-</div>
-<div>
-    <video id="@options.VideoID"
-        style="background-color:lightblue;"
-        width="@options.Width" autoplay="true">Click start to show video
-    </video>
-    <video id="remote"
-        style="background-color:lightblue;"
-        width="@options.Width" autoplay="true">Click start to show video
-    </video>
-</div>
-
-<hr />
-
 
 @code {
     private HubConnection? hubConnection;
     private List<string> messages = new List<string>();
+    private List<string> connectedUsers = new List<string>();
     private string? userInput;
     private string? messageInput;
-
-    WebCamOptions options = new WebCamOptions()
-        {
-            CanvasID = "canvas",
-            VideoID = "video"
-        };
-
-
+    private string? groupInput;
 
 
     protected override async Task OnInitializedAsync()
     {
-        options.Width = 480;
         hubConnection = new HubConnectionBuilder()
             .WithUrl(Navigation.ToAbsoluteUri("/chathub"))
             .Build();
 
-        hubConnection.On<string, string>("ReceiveMessage", (user, message) =>
+        hubConnection.On<string, string, string>("ReceiveGroupMessage", (user, message, roomId) =>
         {
             var encodedMsg = $"{user}: {message}";
             messages.Add(encodedMsg);
+            InvokeAsync(StateHasChanged);
+        });
+
+        hubConnection.On<List<string>>("ReceiveAllConnections", (connectedUser) =>
+        {
+            connectedUsers = connectedUser;
             InvokeAsync(StateHasChanged);
         });
 
@@ -91,8 +89,15 @@
     {
         if (hubConnection is not null)
         {
-            await hubConnection.SendAsync("SendMessage", userInput, messageInput);
+            await hubConnection.SendAsync("SendGroupMessage", userInput, messageInput, groupInput);
+            await hubConnection.SendAsync("GetAllConnections");
         }
+    }
+    private async Task GetAllConnections()
+    {
+
+        await hubConnection.SendAsync("SendGroupMessage", userInput, messageInput, groupInput);
+
     }
 
     public bool IsConnected =>
@@ -104,12 +109,5 @@
         {
             await hubConnection.DisposeAsync();
         }
-    }
-
-
-
-    public async Task Start()
-    {
-        await JSRuntime.InvokeVoidAsync("WebCamFunctions.start", options);
     }
 }
